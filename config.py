@@ -1,9 +1,9 @@
 # Constants (User configurable)
 
-APP_NAME = 'DistributedSomething'       # Used to generate derivative names unique to the application.
+APP_NAME = 'DistributedHelloWorld'       # Used to generate derivative names unique to the application.
 
 # DOCKER REGISTRY INFORMATION:
-DOCKERHUB_TAG = 'user/distributed-something:sometag'
+DOCKERHUB_TAG = 'distributedscience/distributed-helloworld:latest'
 
 # AWS GENERAL SETTINGS:
 AWS_REGION = 'us-east-1'
@@ -13,16 +13,16 @@ AWS_BUCKET = 'your-bucket-name'
 
 # EC2 AND ECS INFORMATION:
 ECS_CLUSTER = 'default'
-CLUSTER_MACHINES = 3
+CLUSTER_MACHINES = 2
 TASKS_PER_MACHINE = 1
-MACHINE_TYPE = ['m4.xlarge']
+MACHINE_TYPE = ['t2.micro']
 MACHINE_PRICE = 0.10
-EBS_VOL_SIZE = 30                       # In GB.  Minimum allowed is 22.
+EBS_VOL_SIZE = 22                       # In GB.  Minimum allowed is 22.
 
 # DOCKER INSTANCE RUNNING ENVIRONMENT:
-DOCKER_CORES = 4                        # Number of software processes to run inside a docker container
+DOCKER_CORES = 1                        # Number of software processes to run inside a docker container
 CPU_SHARES = DOCKER_CORES * 1024        # ECS computing units assigned to each docker container (1024 units = 1 core)
-MEMORY = 15000                          # Memory assigned to the docker container in MB
+MEMORY = 800                            # Memory assigned to the docker container in MB
 SECONDS_TO_START = 3*60                 # Wait before the next process is initiated to avoid memory collisions
 
 # SQS QUEUE INFORMATION:
@@ -40,3 +40,4 @@ MIN_FILE_SIZE_BYTES = 1      # What is the minimal number of bytes an object sho
 NECESSARY_STRING = ''        # Is there any string that should be in the file name to "count"?
 
 # PUT ANYTHING SPECIFIC TO YOUR PROGRAM DOWN HERE
+MY_NAME = 'FirstName LastName'

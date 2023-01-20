@@ -6,7 +6,7 @@
 #
 
 
-FROM someuser/somedocker:sometag
+FROM ubuntu:18.04
 
 # Install S3FS
 USER root

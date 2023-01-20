@@ -44,6 +44,7 @@ if 'DOWNLOAD_FILES' not in os.environ:
     DOWNLOAD_FILES = False
 else:
     DOWNLOAD_FILES = os.environ['DOWNLOAD_FILES']
+MY_NAME = os.environ['MY_NAME']
 
 localIn = '/home/ubuntu/local_input'
 
@@ -110,18 +111,19 @@ def runSomething(message):
 
     # Parse your message somehow to pull out a name variable that's going to make sense to you when you want to look at the logs later
     # What's commented out below will work, otherwise, create your own
-    #group_to_run = message["group"]
-    #groupkeys = list(group_to_run.keys())
-    #groupkeys.sort()
-    #metadataID = '-'.join(groupkeys)
+    group_to_run = message["group"]
+    groupkeys = list(group_to_run.keys())
+    groupkeys.sort()
+    metadataID = '-'.join(groupkeys)
 
     # Add a handler with
-    # watchtowerlogger=watchtower.CloudWatchLogHandler(log_group=LOG_GROUP_NAME, stream_name=str(metadataID),create_log_group=False)
-    # logger.addHandler(watchtowerlogger)
+    watchtowerlogger=watchtower.CloudWatchLogHandler(log_group=LOG_GROUP_NAME, stream_name=str(metadataID),create_log_group=False)
+    logger.addHandler(watchtowerlogger)
 
     # See if this is a message you've already handled, if you've so chosen
     # First, build a variable called remoteOut that equals your unique prefix of where your output should be
     # Then check if there are too many files
+    remoteOut = metadataID
 
     if CHECK_IF_DONE_BOOL.upper() == 'TRUE':
         try:
@@ -143,14 +145,25 @@ def runSomething(message):
     # ie cmd = my-program --my-flag-1 True --my-flag-2 VARIABLE
     # you should assign the variable "localOut" to the output location where you expect your program to put files
 
+    localOut = metadataID
+    local_file_name = os.path.join(localOut,'HelloWorld.txt')
+    if not os.path.exists(localOut):
+        os.makedirs(localOut,exist_ok=True)
+
+    cmd = f'printf "Hi, my name is {MY_NAME}, and my favorite {groupkeys[0]} is {group_to_run[groupkeys[0]]}, and my favorite {groupkeys[1]} is {group_to_run[groupkeys[1]]}" > {local_file_name}'
+
     print('Running', cmd)
     logger.info(cmd)
-    subp = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    #typically, changes to the subprocess command aren't needed at all
+    subp = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     monitorAndLog(subp,logger)
 
     # Figure out a done condition - a number of files being created, a particular file being created, an exit code, etc.
+
+    done = True
+
     # If done, get the outputs and move them to S3
-    if [ENTER DONE CONDITION HERE]:
+    if done:
         time.sleep(30)
         mvtries=0
         while mvtries <3:

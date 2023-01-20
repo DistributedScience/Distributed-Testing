@@ -1,6 +1,6 @@
-user = user
-project = distributed-something
-tag = sometag
+user = distributedscience
+project = distributed-helloworld
+tag = latest
 
 .DEFAULT_GOAL: build
 build:

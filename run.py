@@ -1,6 +1,7 @@
 from __future__ import print_function
 import os, sys
 import boto3
+import configparser
 import datetime
 import json
 import time
@@ -145,7 +146,11 @@ def generate_task_definition(AWS_PROFILE):
         {
             "name": "NECESSARY_STRING",
             "value": NECESSARY_STRING
-        }
+        },
+        {
+            "name": "MY_NAME",
+            "value": MY_NAME
+        },
     ]
     return task_definition, taskRoleArn
 
