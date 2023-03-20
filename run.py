@@ -387,10 +387,10 @@ def setup():
     AWS_CREDENTIAL_FILE_NAME = os.environ['HOME'] + '/.aws/credentials'
     sqs = boto3.client('sqs')
     get_or_create_queue(sqs)
-    # ecs = boto3.client('ecs')
-    # get_or_create_cluster(ecs)
-    # update_ecs_task_definition(ecs, ECS_TASK_NAME, AWS_PROFILE)
-    # create_or_update_ecs_service(ecs, ECS_SERVICE_NAME, ECS_TASK_NAME)
+    ecs = boto3.client('ecs')
+    get_or_create_cluster(ecs)
+    update_ecs_task_definition(ecs, ECS_TASK_NAME, AWS_PROFILE)
+    create_or_update_ecs_service(ecs, ECS_SERVICE_NAME, ECS_TASK_NAME)
 
 #################################
 # SERVICE 2: SUBMIT JOB
