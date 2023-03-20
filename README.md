@@ -1,15 +1,24 @@
-# Distributed-HelloWorld
+# Distributed-Testing
 
 [Distributed-Something](https://github.com/DistributedScience/Distributed-Something) is an app to run encapsulated docker containers that do... something in the Amazon Web Services (AWS) infrastructure.
 We are interested in scientific image analysis so we have used it for [CellProfiler](https://github.com/DistributedScience/Distributed-CellProfiler), [Fiji](https://github.com/DistributedScience/Distributed-Fiji), and [BioFormats2Raw](https://github.com/DistributedScience/Distributed-OmeZarrMaker).
 You can use it for whatever you want!
 
-Here, as an example, we have used it to make an app that lets you say hello to the world, as well as list some of your favorite things.
-We have provided Distributed-HelloWorld to assist you in the creation of your own Distributed-Something application.
-You can see the full code changes necessary to make a simple, functioning application from the [Distributed-Something template](https://github.com/DistributedScience/Distributed-Something).
-The full code changes are available [here](https://github.com/DistributedScience/Distributed-HelloWorld/pull/1/files).
+[Distributed-HelloWorld](https://github.com/DistributedScience/Distributed-HelloWorld) uses it to make a simple app that lets you say hello to the world, as well as list some of your favorite things.
 
-Like any Distributed-Something applicaton, to make it run, a user still needs to add their AWS-account specific information.
+Here, we reimplement Distributed-HelloWorld, with a testing suite.
+
+Like any Distributed-Something applicaton, to make it run in AWS, a user still needs to add their AWS-account specific information.
+
+The test suite however is run locally, using [moto](https://docs.getmoto.org/en/latest/) to mock AWS infastructure. This lets you make changes and test them without concern for breaking thins on live AWS infrastructure (and incur the associated costs).
+
+## Tests
+
+To run the tests, setup a virtual environment using your tool of choice (eg `venv`. `conda`, etc), and install the depedencies:
+
+    pip install -r requirements.txt
+
+Run `pytest` in the terminal.
 
 Happy Distributing!
 
