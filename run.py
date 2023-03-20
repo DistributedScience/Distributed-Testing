@@ -1,4 +1,3 @@
-from __future__ import print_function
 import os, sys
 import boto3
 import configparser
@@ -11,6 +10,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from config import *
+
+
 WAIT_TIME = 60
 MONITOR_TIME = 60
 
@@ -47,22 +48,12 @@ TASK_DEFINITION = {
     ]
 }
 
-SQS_DEFINITION = {
-    "DelaySeconds": "0",
-    "MaximumMessageSize": "262144",
-    "MessageRetentionPeriod": "1209600",
-    "ReceiveMessageWaitTimeSeconds": "0",
-    "RedrivePolicy": "{\"deadLetterTargetArn\":\"" + SQS_DEAD_LETTER_QUEUE + "\",\"maxReceiveCount\":\"10\"}",
-    "VisibilityTimeout": str(SQS_MESSAGE_VISIBILITY)
-}
-
 
 #################################
 # AUXILIARY FUNCTIONS
 #################################
 
 def generate_task_definition(AWS_PROFILE):
-    taskRoleArn = False
     task_definition = TASK_DEFINITION.copy()
 
     config = configparser.ConfigParser()
@@ -79,6 +70,7 @@ def generate_task_definition(AWS_PROFILE):
         print ("Using role for credentials", config[profile_name]['role_arn'])
         taskRoleArn = config[profile_name]['role_arn']
     else:
+        taskRoleArn = False
         if config.has_option(profile_name, 'source_profile'):
             creds = configparser.ConfigParser()
             creds.read(f"{os.environ['HOME']}/.aws/credentials")
@@ -88,6 +80,11 @@ def generate_task_definition(AWS_PROFILE):
         elif config.has_option(profile_name, 'aws_access_key_id'):
             aws_access_key = config[profile_name]['aws_access_key_id']
             aws_secret_key = config[profile_name]['aws_secret_access_key']
+        elif profile_name == 'default':
+            creds = configparser.ConfigParser()
+            creds.read(f"{os.environ['HOME']}/.aws/credentials")
+            aws_access_key = creds['default']['aws_access_key_id']
+            aws_secret_key = creds['default']['aws_secret_access_key'] 
         else:
             print ("Problem getting credentials")
         task_definition['containerDefinitions'][0]['environment'] += [
@@ -101,7 +98,7 @@ def generate_task_definition(AWS_PROFILE):
             }]
 
     sqs = boto3.client('sqs')
-    queue_name = get_queue_url(sqs)
+    queue_name = get_queue_url(sqs, SQS_QUEUE_NAME)
     task_definition['containerDefinitions'][0]['environment'] += [
         {
             'name': 'APP_NAME',
@@ -188,18 +185,41 @@ def create_or_update_ecs_service(ecs, ECS_SERVICE_NAME, ECS_TASK_NAME):
     ecs.create_service(cluster=ECS_CLUSTER, serviceName=ECS_SERVICE_NAME, taskDefinition=ECS_TASK_NAME, desiredCount=0)
     print('Service created')
 
-def get_queue_url(sqs):
+def get_queue_url(sqs, queue_name):
     result = sqs.list_queues()
+    queue_url = None
     if 'QueueUrls' in result.keys():
         for u in result['QueueUrls']:
-            if u.split('/')[-1] == SQS_QUEUE_NAME:
-                return u
-    return None
+            if u.split('/')[-1] == queue_name:
+                queue_url = u
+    return queue_url
 
 def get_or_create_queue(sqs):
-    u = get_queue_url(sqs)
-    if u is None:
+    queue_url = get_queue_url(sqs, SQS_QUEUE_NAME)
+    dead_url = get_queue_url(sqs, SQS_DEAD_LETTER_QUEUE)
+    if dead_url is None:
+        print("Creating DeadLetter queue")
+        sqs.create_queue(QueueName=SQS_DEAD_LETTER_QUEUE)
+        time.sleep(WAIT_TIME)
+        dead_url = get_queue_url(sqs, SQS_DEAD_LETTER_QUEUE)
+    else:
+        print (f'DeadLetter queue {SQS_DEAD_LETTER_QUEUE} already exists.')
+    if queue_url is None:
         print('Creating queue')
+        response = sqs.get_queue_attributes(QueueUrl=dead_url, AttributeNames=["QueueArn"])
+        dead_arn = response["Attributes"]["QueueArn"]
+        
+        SQS_DEFINITION = {
+            "DelaySeconds": "0",
+            "MaximumMessageSize": "262144",
+            "MessageRetentionPeriod": "1209600",
+            "ReceiveMessageWaitTimeSeconds": "0",
+            "RedrivePolicy": '{"deadLetterTargetArn":"'
+            + dead_arn
+            + '","maxReceiveCount":"10"}',
+            "VisibilityTimeout": str(SQS_MESSAGE_VISIBILITY),
+        }
+
         sqs.create_queue(QueueName=SQS_QUEUE_NAME, Attributes=SQS_DEFINITION)
         time.sleep(WAIT_TIME)
     else:
@@ -367,10 +387,10 @@ def setup():
     AWS_CREDENTIAL_FILE_NAME = os.environ['HOME'] + '/.aws/credentials'
     sqs = boto3.client('sqs')
     get_or_create_queue(sqs)
-    ecs = boto3.client('ecs')
-    get_or_create_cluster(ecs)
-    update_ecs_task_definition(ecs, ECS_TASK_NAME, AWS_PROFILE)
-    create_or_update_ecs_service(ecs, ECS_SERVICE_NAME, ECS_TASK_NAME)
+    # ecs = boto3.client('ecs')
+    # get_or_create_cluster(ecs)
+    # update_ecs_task_definition(ecs, ECS_TASK_NAME, AWS_PROFILE)
+    # create_or_update_ecs_service(ecs, ECS_SERVICE_NAME, ECS_TASK_NAME)
 
 #################################
 # SERVICE 2: SUBMIT JOB
