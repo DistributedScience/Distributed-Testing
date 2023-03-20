@@ -1,0 +1,3 @@
+boto3>=1.0.0
+moto[cloudwatch, ec2, ecs, logs, sqs, s3]>=4.1.4
+pytest>=7.2.2
