@@ -153,14 +153,16 @@ class TestGenerateTaskDefinition:
         assert taskRoleArn == dummy_role_arn
 
 class TestUpdateECSTaskDefinition:
-    ecs_task_name = config.APP_NAME + 'Task'
+    ECS_TASK_NAME = config.APP_NAME + 'Task'
 
-    @pytest.mark.skip(reason="Not yet ready - needs to change aws credentials parsing")
-    @mock_sqs
-    def test_update_ecs_task_definition(self, ecs, no_wait):
-        run.update_ecs_task_definition(ecs, self.ecs_task_name, config.AWS_PROFILE)
+    def test_update_ecs_task_definition(self, aws_config, sqs, ecs, no_wait):
+        run.get_or_create_queue(sqs)
+        run.get_or_create_cluster(ecs)
+        run.update_ecs_task_definition(ecs, self.ECS_TASK_NAME, config.AWS_PROFILE)
         res = ecs.list_task_definitions()
-        assert res["taskDefinitionArns"] == [f"arn:aws:ecs:{config.AWS_REGION}:123456789012:task-definition/{config.ECS_TASK_DEFINITION}:1"]
+
+        assert res["ResponseMetadata"]["HTTPStatusCode"] == 200
+        assert res["taskDefinitionArns"] == [f"arn:aws:ecs:{config.AWS_REGION}:123456789012:task-definition/{self.ECS_TASK_NAME}:1"]
 
 class TestSetup:
     @mock_sqs
