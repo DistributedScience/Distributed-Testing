@@ -5,7 +5,7 @@ import pytest
 import boto3
 from moto import mock_sqs, mock_ecs
 
-from config import AWS_REGION
+from config import AWS_REGION, AWS_PROFILE
 
 
 # WARNING: Do not import a module here or in any of the tests
@@ -58,14 +58,14 @@ def aws_config(monkeypatch, tmp_path):
     
     aws_config_file.write_text(dedent(
         f"""
-        [default]
+        [{AWS_PROFILE}]
         aws_access_key_id = {FAKE_AWS_ACCESS_KEY_ID}
         aws_secret_access_key = {FAKE_AWS_SECRET_ACCESS_KEY}
         """
     ))
     aws_creds_file.write_text(dedent(
         f"""
-        [default]
+        [{AWS_PROFILE}]
         output = json
         region = us-east-1
         aws_access_key_id = {FAKE_AWS_ACCESS_KEY_ID}

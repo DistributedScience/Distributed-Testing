@@ -9,6 +9,9 @@ import run
 from tests.conftest import FAKE_AWS_ACCESS_KEY_ID, FAKE_AWS_SECRET_ACCESS_KEY
 
 
+ECS_TASK_NAME = config.APP_NAME + 'Task'
+ECS_SERVICE_NAME = config.APP_NAME + 'Service'
+
 @pytest.fixture(scope="module")
 def no_wait():
     run.WAIT_TIME = 0
@@ -19,17 +22,21 @@ class TestGetQueueURL:
 
     def test_get_nonexistent_queue_url(self, sqs):
         url = run.get_queue_url(sqs, self.queue_name)
+
         assert url is None
 
     def test_get_existing_queue_url(self, sqs):
         sqs.create_queue(QueueName=self.queue_name)
+
         url = run.get_queue_url(sqs,self.queue_name)
+
         assert url is not None
         assert url == f"https://sqs.{config.AWS_REGION}.amazonaws.com/123456789012/{self.queue_name}"
 
 class TestGetOrCreateQueue:
     def test_create_nonexistent_dead_queue(self, sqs, no_wait):
         run.get_or_create_queue(sqs)
+
         res = sqs.list_queues()
 
         res_urls = sorted(res['QueueUrls'])
@@ -63,6 +70,7 @@ class TestGetOrCreateQueue:
     def test_create_existing_dead_queue(self, sqs, no_wait):
         sqs.create_queue(QueueName=config.SQS_DEAD_LETTER_QUEUE)
         run.get_or_create_queue(sqs)
+
         res = sqs.list_queues()
 
         res_urls = sorted(res['QueueUrls'])
@@ -77,6 +85,7 @@ class TestGetOrCreateQueue:
     def test_create_existing_queue(self, sqs, no_wait):
         sqs.create_queue(QueueName=config.SQS_QUEUE_NAME)
         run.get_or_create_queue(sqs)
+
         res = sqs.list_queues()
 
         res_urls = sorted(res['QueueUrls'])
@@ -91,13 +100,17 @@ class TestGetOrCreateQueue:
 class TestGetOrCreateCluster:
     def test_create_nonexistent_cluster(self, ecs, no_wait):
         run.get_or_create_cluster(ecs)
+
         res = ecs.list_clusters()
+
         assert res["clusterArns"] == [f"arn:aws:ecs:{config.AWS_REGION}:123456789012:cluster/{config.ECS_CLUSTER}"]
 
     def test_create_existing_cluster(self, ecs, no_wait):
         ecs.create_cluster(clusterName=config.ECS_CLUSTER)
         run.get_or_create_cluster(ecs)
+
         res = ecs.list_clusters()
+
         assert res["clusterArns"] == [f"arn:aws:ecs:{config.AWS_REGION}:123456789012:cluster/{config.ECS_CLUSTER}"]
 
 # for constructing expected results, see:
@@ -106,6 +119,7 @@ class TestGenerateTaskDefinition:
     def test_generate_task_definition(self, aws_config, sqs, ecs, no_wait):
         run.get_or_create_queue(sqs)
         run.get_or_create_cluster(ecs)
+
         task_definition, taskRoleArn = run.generate_task_definition(config.AWS_PROFILE)
 
         assert taskRoleArn == False
@@ -148,21 +162,37 @@ class TestGenerateTaskDefinition:
 
         run.get_or_create_queue(sqs)
         run.get_or_create_cluster(ecs)
+
         _, taskRoleArn = run.generate_task_definition(config.AWS_PROFILE)
 
         assert taskRoleArn == dummy_role_arn
 
 class TestUpdateECSTaskDefinition:
-    ECS_TASK_NAME = config.APP_NAME + 'Task'
-
     def test_update_ecs_task_definition(self, aws_config, sqs, ecs, no_wait):
         run.get_or_create_queue(sqs)
         run.get_or_create_cluster(ecs)
-        run.update_ecs_task_definition(ecs, self.ECS_TASK_NAME, config.AWS_PROFILE)
+        run.update_ecs_task_definition(ecs, ECS_TASK_NAME, config.AWS_PROFILE)
+
         res = ecs.list_task_definitions()
 
         assert res["ResponseMetadata"]["HTTPStatusCode"] == 200
-        assert res["taskDefinitionArns"] == [f"arn:aws:ecs:{config.AWS_REGION}:123456789012:task-definition/{self.ECS_TASK_NAME}:1"]
+        assert res["taskDefinitionArns"] == [f"arn:aws:ecs:{config.AWS_REGION}:123456789012:task-definition/{ECS_TASK_NAME}:1"]
+
+class TestCreateUpdateECSService:
+    def test_create_ecs_service(self, aws_config, sqs, ecs, no_wait):
+        run.get_or_create_queue(sqs)
+        run.get_or_create_cluster(ecs)
+        run.update_ecs_task_definition(ecs, config.APP_NAME + 'Task', config.AWS_PROFILE)
+        run.create_or_update_ecs_service(ecs, ECS_SERVICE_NAME, ECS_TASK_NAME)
+
+        res = ecs.list_services(cluster=config.ECS_CLUSTER)
+
+        assert res["ResponseMetadata"]["HTTPStatusCode"] == 200
+        assert res["serviceArns"] == [f"arn:aws:ecs:{config.AWS_REGION}:123456789012:service/{config.AWS_PROFILE}/{ECS_SERVICE_NAME}"]
+
+    @pytest.mark.skip(reason="Not yet implemented")
+    def test_update_ecs_service(self, aws_config, sqs, ecs, no_wait):
+        ...
 
 class TestSetup:
     @mock_sqs
