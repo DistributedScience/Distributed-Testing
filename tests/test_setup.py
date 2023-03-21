@@ -1,5 +1,6 @@
 import json
 from textwrap import dedent
+import pytest
 
 from moto import mock_sqs, mock_ecs
 
@@ -10,6 +11,7 @@ from tests.conftest import FAKE_AWS_ACCESS_KEY_ID, FAKE_AWS_SECRET_ACCESS_KEY
 
 ECS_TASK_NAME = config.APP_NAME + 'Task'
 ECS_SERVICE_NAME = config.APP_NAME + 'Service'
+
 
 class TestGetQueueURL:
     queue_name = "test_queue"
@@ -29,7 +31,7 @@ class TestGetQueueURL:
 
 
 class TestGetOrCreateQueue:
-    def test_create_nonexistent_dead_queue(self, sqs, no_wait):
+    def test_create_nonexistent_dead_queue(self, sqs):
         run.get_or_create_queue(sqs)
 
         res = sqs.list_queues()
@@ -62,7 +64,7 @@ class TestGetOrCreateQueue:
         assert redrive_policy_arn == dead_queue_arn["Attributes"]["QueueArn"]
 
 
-    def test_create_existing_dead_queue(self, sqs, no_wait):
+    def test_create_existing_dead_queue(self, sqs):
         sqs.create_queue(QueueName=config.SQS_DEAD_LETTER_QUEUE)
         run.get_or_create_queue(sqs)
 
@@ -77,7 +79,7 @@ class TestGetOrCreateQueue:
 
         assert res_urls == expected_urls
 
-    def test_create_existing_queue(self, sqs, no_wait):
+    def test_create_existing_queue(self, sqs):
         sqs.create_queue(QueueName=config.SQS_QUEUE_NAME)
         run.get_or_create_queue(sqs)
 
@@ -94,14 +96,14 @@ class TestGetOrCreateQueue:
 
 
 class TestGetOrCreateCluster:
-    def test_create_nonexistent_cluster(self, ecs, no_wait):
+    def test_create_nonexistent_cluster(self, ecs):
         run.get_or_create_cluster(ecs)
 
         res = ecs.list_clusters()
 
         assert res["clusterArns"] == [f"arn:aws:ecs:{config.AWS_REGION}:123456789012:cluster/{config.ECS_CLUSTER}"]
 
-    def test_create_existing_cluster(self, ecs, no_wait):
+    def test_create_existing_cluster(self, ecs):
         ecs.create_cluster(clusterName=config.ECS_CLUSTER)
         run.get_or_create_cluster(ecs)
 
@@ -113,7 +115,7 @@ class TestGetOrCreateCluster:
 # for constructing expected results, see:
 # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ecs/client/register_task_definition.html
 class TestGenerateTaskDefinition:
-    def test_generate_task_definition(self, aws_config, sqs, ecs, no_wait):
+    def test_generate_task_definition(self, aws_config, sqs, ecs):
         run.get_or_create_queue(sqs)
         run.get_or_create_cluster(ecs)
 
@@ -145,7 +147,7 @@ class TestGenerateTaskDefinition:
         assert aws_secret_access_key_res[0]["value"] == FAKE_AWS_SECRET_ACCESS_KEY
         assert queue_name_res[0]["value"] == run.get_queue_url(sqs, config.SQS_QUEUE_NAME)
 
-    def test_generate_task_definition_role_arn(self, aws_config, sqs, ecs, no_wait):
+    def test_generate_task_definition_role_arn(self, aws_config, sqs, ecs):
         dummy_role_arn = "arn:aws:iam::123456789012:role/ecsTaskExecutionRole"
         
         aws_config['aws_config_file'].write_text(dedent(
@@ -166,7 +168,7 @@ class TestGenerateTaskDefinition:
 
 
 class TestUpdateECSTaskDefinition:
-    def test_update_ecs_task_definition(self, aws_config, sqs, ecs, no_wait):
+    def test_update_ecs_task_definition(self, aws_config, sqs, ecs):
         run.get_or_create_queue(sqs)
         run.get_or_create_cluster(ecs)
         
@@ -179,7 +181,7 @@ class TestUpdateECSTaskDefinition:
 
 
 class TestCreateUpdateECSService:
-    def test_create_ecs_service(self, aws_config, sqs, ecs, no_wait):
+    def test_create_ecs_service(self, aws_config, sqs, ecs):
         run.get_or_create_queue(sqs)
         run.get_or_create_cluster(ecs)
         run.update_ecs_task_definition(ecs, config.APP_NAME + 'Task', config.AWS_PROFILE)
@@ -191,7 +193,7 @@ class TestCreateUpdateECSService:
         assert res["ResponseMetadata"]["HTTPStatusCode"] == 200
         assert res["serviceArns"] == [f"arn:aws:ecs:{config.AWS_REGION}:123456789012:service/{config.AWS_PROFILE}/{ECS_SERVICE_NAME}"]
 
-    def test_update_ecs_service(self, aws_config, sqs, ecs, no_wait, capsys):
+    def test_update_ecs_service(self, aws_config, sqs, ecs, capsys):
         run.get_or_create_queue(sqs)
         run.get_or_create_cluster(ecs)
         run.update_ecs_task_definition(ecs, config.APP_NAME + 'Task', config.AWS_PROFILE)
@@ -214,7 +216,7 @@ class TestCreateUpdateECSService:
 class TestSetup:
     @mock_sqs
     @mock_ecs
-    def test_setup(self, aws_config, no_wait, capsys):
+    def test_setup(self, aws_config, capsys):
         run.setup()
 
         res = capsys.readouterr().out.split('\n')

@@ -50,6 +50,7 @@ def aws_credentials():
 
     os.environ["AWS_DEFAULT_REGION"] = AWS_REGION
 
+
 @pytest.fixture(scope="function")
 def aws_config(monkeypatch, tmp_path):
     """
@@ -86,10 +87,12 @@ def aws_config(monkeypatch, tmp_path):
     # return in case we want to override config or credentials file contents
     return {"aws_dir": aws_dir, "aws_config_file": aws_config_file, "aws_creds_file": aws_creds_file}
 
+
 @pytest.fixture(scope="function")
 def sqs():
     with mock_sqs():
         yield boto3.client("sqs", region_name=os.environ["AWS_DEFAULT_REGION"])
+
 
 @pytest.fixture(scope="function")
 def ecs():
