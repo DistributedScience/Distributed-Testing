@@ -33,6 +33,7 @@ class TestGetQueueURL:
         assert url is not None
         assert url == f"https://sqs.{config.AWS_REGION}.amazonaws.com/123456789012/{self.queue_name}"
 
+
 class TestGetOrCreateQueue:
     def test_create_nonexistent_dead_queue(self, sqs, no_wait):
         run.get_or_create_queue(sqs)
@@ -97,6 +98,7 @@ class TestGetOrCreateQueue:
 
         assert res_urls == expected_urls
 
+
 class TestGetOrCreateCluster:
     def test_create_nonexistent_cluster(self, ecs, no_wait):
         run.get_or_create_cluster(ecs)
@@ -112,6 +114,7 @@ class TestGetOrCreateCluster:
         res = ecs.list_clusters()
 
         assert res["clusterArns"] == [f"arn:aws:ecs:{config.AWS_REGION}:123456789012:cluster/{config.ECS_CLUSTER}"]
+
 
 # for constructing expected results, see:
 # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ecs/client/register_task_definition.html
@@ -167,10 +170,12 @@ class TestGenerateTaskDefinition:
 
         assert taskRoleArn == dummy_role_arn
 
+
 class TestUpdateECSTaskDefinition:
     def test_update_ecs_task_definition(self, aws_config, sqs, ecs, no_wait):
         run.get_or_create_queue(sqs)
         run.get_or_create_cluster(ecs)
+        
         run.update_ecs_task_definition(ecs, ECS_TASK_NAME, config.AWS_PROFILE)
 
         res = ecs.list_task_definitions()
@@ -178,11 +183,13 @@ class TestUpdateECSTaskDefinition:
         assert res["ResponseMetadata"]["HTTPStatusCode"] == 200
         assert res["taskDefinitionArns"] == [f"arn:aws:ecs:{config.AWS_REGION}:123456789012:task-definition/{ECS_TASK_NAME}:1"]
 
+
 class TestCreateUpdateECSService:
     def test_create_ecs_service(self, aws_config, sqs, ecs, no_wait):
         run.get_or_create_queue(sqs)
         run.get_or_create_cluster(ecs)
         run.update_ecs_task_definition(ecs, config.APP_NAME + 'Task', config.AWS_PROFILE)
+
         run.create_or_update_ecs_service(ecs, ECS_SERVICE_NAME, ECS_TASK_NAME)
 
         res = ecs.list_services(cluster=config.ECS_CLUSTER)
@@ -190,9 +197,24 @@ class TestCreateUpdateECSService:
         assert res["ResponseMetadata"]["HTTPStatusCode"] == 200
         assert res["serviceArns"] == [f"arn:aws:ecs:{config.AWS_REGION}:123456789012:service/{config.AWS_PROFILE}/{ECS_SERVICE_NAME}"]
 
-    @pytest.mark.skip(reason="Not yet implemented")
-    def test_update_ecs_service(self, aws_config, sqs, ecs, no_wait):
-        ...
+    def test_update_ecs_service(self, aws_config, sqs, ecs, no_wait, capsys):
+        run.get_or_create_queue(sqs)
+        run.get_or_create_cluster(ecs)
+        run.update_ecs_task_definition(ecs, config.APP_NAME + 'Task', config.AWS_PROFILE)
+
+        run.create_or_update_ecs_service(ecs, ECS_SERVICE_NAME, ECS_TASK_NAME)
+        run.create_or_update_ecs_service(ecs, ECS_SERVICE_NAME, ECS_TASK_NAME)
+
+        captured = capsys.readouterr().out.split('\n')
+        
+        exists_reported = False
+        for line in captured:
+            if "service exists" in line.lower():
+                exists_reported = True
+                break
+        
+        assert exists_reported
+
 
 class TestSetup:
     @mock_sqs
