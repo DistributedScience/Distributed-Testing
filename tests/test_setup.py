@@ -207,19 +207,39 @@ class TestCreateUpdateECSService:
 
         captured = capsys.readouterr().out.split('\n')
         
-        exists_reported = False
+        service_already_exists = False
         for line in captured:
             if "service exists" in line.lower():
-                exists_reported = True
+                service_already_exists = True
                 break
         
-        assert exists_reported
+        assert service_already_exists
 
 
+# if all of the above pass, this should pass without error
 class TestSetup:
     @mock_sqs
     @mock_ecs
-    @pytest.mark.skip(reason="Not yet safe to run")
-    def test_setup(self, aws_config, no_wait):
+    def test_setup(self, aws_config, no_wait, capsys):
         run.setup()
-        
+
+        res = capsys.readouterr().out.split('\n')
+
+        dead_letter_queue_created = False
+        queue_created = False
+        cluster_created = False
+        task_definition_registered = False
+        service_created = False
+        for line in res:
+            if "creating deadletter queue" in line.lower():
+                dead_letter_queue_created = True
+            if "creating queue" in line.lower():
+                queue_created = True
+            if f"cluster {config.AWS_PROFILE} created" in line.lower():
+                cluster_created = True
+            if "task definition registered" in line.lower():
+                task_definition_registered = True
+            if "service created" in line.lower():
+                service_created = True
+
+        assert all([dead_letter_queue_created, queue_created, cluster_created, task_definition_registered, service_created])
