@@ -5,6 +5,7 @@ import pytest
 import boto3
 from moto import mock_sqs, mock_ecs
 
+import run
 from config import AWS_REGION, AWS_PROFILE
 
 
@@ -27,6 +28,12 @@ FAKE_AWS_SECRET_ACCESS_KEY = 'testing'
 
 FAKE_AWS_SECURITY_TOKEN = 'testing'
 FAKE_AWS_SESSION_TOKEN = 'testing'
+
+
+@pytest.fixture(autouse=True, scope="session")
+def no_wait():
+    run.WAIT_TIME = 0
+    run.MONITOR_TIME = 0
 
 
 @pytest.fixture(autouse=True, scope="session")

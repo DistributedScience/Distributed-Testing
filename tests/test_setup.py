@@ -1,7 +1,6 @@
 import json
 from textwrap import dedent
 
-import pytest
 from moto import mock_sqs, mock_ecs
 
 import config
@@ -11,11 +10,6 @@ from tests.conftest import FAKE_AWS_ACCESS_KEY_ID, FAKE_AWS_SECRET_ACCESS_KEY
 
 ECS_TASK_NAME = config.APP_NAME + 'Task'
 ECS_SERVICE_NAME = config.APP_NAME + 'Service'
-
-@pytest.fixture(scope="module")
-def no_wait():
-    run.WAIT_TIME = 0
-
 
 class TestGetQueueURL:
     queue_name = "test_queue"
