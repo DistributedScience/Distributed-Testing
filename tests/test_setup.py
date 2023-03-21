@@ -100,6 +100,8 @@ class TestGetOrCreateCluster:
         res = ecs.list_clusters()
         assert res["clusterArns"] == [f"arn:aws:ecs:{config.AWS_REGION}:123456789012:cluster/{config.ECS_CLUSTER}"]
 
+# for constructing expected results, see:
+# https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ecs/client/register_task_definition.html
 class TestGenerateTaskDefinition:
     def test_generate_task_definition(self, aws_config, sqs, ecs, no_wait):
         run.get_or_create_queue(sqs)
@@ -132,22 +134,23 @@ class TestGenerateTaskDefinition:
         assert aws_secret_access_key_res[0]["value"] == FAKE_AWS_SECRET_ACCESS_KEY
         assert queue_name_res[0]["value"] == run.get_queue_url(sqs, config.SQS_QUEUE_NAME)
 
-    @pytest.mark.skip("Not yet implemented")
     def test_generate_task_definition_role_arn(self, aws_config, sqs, ecs, no_wait):
-        # TODO: add role_arn option
+        dummy_role_arn = "arn:aws:iam::123456789012:role/ecsTaskExecutionRole"
+        
         aws_config['aws_config_file'].write_text(dedent(
             f"""
             [default]
             aws_access_key_id = testing
             aws_secret_access_key = testing
+            role_arn = {dummy_role_arn}
             """
         ))
 
         run.get_or_create_queue(sqs)
         run.get_or_create_cluster(ecs)
-        task_definition, taskRoleArn = run.generate_task_definition(config.AWS_PROFILE)
+        _, taskRoleArn = run.generate_task_definition(config.AWS_PROFILE)
 
-        assert taskRoleArn == True
+        assert taskRoleArn == dummy_role_arn
 
 class TestUpdateECSTaskDefinition:
     ecs_task_name = config.APP_NAME + 'Task'
