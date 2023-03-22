@@ -1,6 +1,5 @@
 import json
 from textwrap import dedent
-import pytest
 
 from moto import mock_sqs, mock_ecs
 

@@ -1,5 +1,6 @@
 import os, sys
 from textwrap import dedent
+from pathlib import Path
 
 import pytest
 import boto3
@@ -28,6 +29,8 @@ FAKE_AWS_SECRET_ACCESS_KEY = 'testing'
 
 FAKE_AWS_SECURITY_TOKEN = 'testing'
 FAKE_AWS_SESSION_TOKEN = 'testing'
+
+JOB_FILE = Path(__file__).parent.parent / "files/exampleJob.json"
 
 
 @pytest.fixture(autouse=True, scope="session")
