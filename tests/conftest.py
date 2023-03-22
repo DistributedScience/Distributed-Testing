@@ -31,6 +31,7 @@ FAKE_AWS_SECURITY_TOKEN = 'testing'
 FAKE_AWS_SESSION_TOKEN = 'testing'
 
 JOB_FILE = Path(__file__).parent.parent / "files/exampleJob.json"
+FLEET_FILE = Path(__file__).parent.parent / "files/exampleFleet_us-east-1.json"
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -101,3 +102,34 @@ def sqs():
 def ecs():
     with mock_ecs():
         yield boto3.client("ecs", os.environ["AWS_DEFAULT_REGION"])
+
+
+# Below functions are fixtures that run steps 1 - 4
+#
+# The reason they return callbacks, instead of calling the run.x() functions
+# directly is because the moto mock decorators must be applied to the test
+# before running run.x().
+#
+# We can't decorate the fixtures themselves with moto mock decorators 
+# because while the run.x() functions within the fixtures would be mocked,
+# the runx.x() functions within the tests using the fixtures would NOT be.
+# Therefor we return a non-mocked callback, the tests are decorated with
+# mocks, and then the tests invoke the callback returned by the fixture.
+
+@pytest.fixture(scope="function")
+def run_setup(aws_config):
+    def f():
+        run.setup()
+
+    return f
+
+
+@pytest.fixture(scope="function")
+def run_submitJob(run_setup, monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["run.py", "submitJob", str(JOB_FILE)])
+
+    def f():
+        run_setup()
+        run.submitJob()
+
+    return f

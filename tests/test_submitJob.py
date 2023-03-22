@@ -1,4 +1,3 @@
-import sys
 import json
 
 import boto3
@@ -12,8 +11,8 @@ from tests.conftest import JOB_FILE
 class TestJobQueue:
     @mock_sqs
     @mock_ecs
-    def test_create_job_queue_instance(self, aws_config):
-        run.setup()
+    def test_create_job_queue_instance(self, run_setup):
+        run_setup()
 
         job_queue = run.JobQueue()
 
@@ -29,14 +28,10 @@ class TestJobFile:
 
 
 class TestSubmitJob:
-    @mock_ecs
     @mock_sqs
-    def test_submit_job(self, aws_config, monkeypatch):
-        run.setup()
-
-        monkeypatch.setattr(sys, "argv", ["run.py", "submitJob", str(JOB_FILE)])
-
-        run.submitJob()
+    @mock_ecs
+    def test_submit_job(self, run_submitJob):
+        run_submitJob()
 
         sqs = boto3.resource('sqs')
         queue = sqs.get_queue_by_name(QueueName=config.SQS_QUEUE_NAME)

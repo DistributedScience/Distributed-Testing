@@ -215,8 +215,8 @@ class TestCreateUpdateECSService:
 class TestSetup:
     @mock_sqs
     @mock_ecs
-    def test_setup(self, aws_config, capsys):
-        run.setup()
+    def test_setup(self, capsys, run_setup):
+        run_setup()
 
         res = capsys.readouterr().out.split('\n')
 
