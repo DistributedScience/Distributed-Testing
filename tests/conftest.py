@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 import boto3
-from moto import mock_sqs, mock_ecs
+from moto import mock_sqs, mock_ecs, mock_s3
 
 import run
-from config import AWS_REGION, AWS_PROFILE
+from config import AWS_REGION, AWS_PROFILE, AWS_BUCKET, APP_NAME
 
 
 # WARNING: Do not import a module here or in any of the tests
@@ -32,6 +32,8 @@ FAKE_AWS_SESSION_TOKEN = 'testing'
 
 JOB_FILE = Path(__file__).parent.parent / "files/exampleJob.json"
 FLEET_FILE = Path(__file__).parent.parent / "files/exampleFleet_us-east-1.json"
+# does not exist unless startCluster has been run
+MONITOR_FILE = Path(__file__).parent.parent / f"files/{APP_NAME}SpotFleetRequestId.json"
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -95,13 +97,34 @@ def aws_config(monkeypatch, tmp_path):
 @pytest.fixture(scope="function")
 def sqs():
     with mock_sqs():
-        yield boto3.client("sqs", region_name=os.environ["AWS_DEFAULT_REGION"])
+        yield boto3.client("sqs", region_name=AWS_REGION)
 
 
 @pytest.fixture(scope="function")
 def ecs():
     with mock_ecs():
-        yield boto3.client("ecs", os.environ["AWS_DEFAULT_REGION"])
+        yield boto3.client("ecs", region_name=AWS_REGION)
+
+
+@pytest.fixture(scope="function")
+def s3():
+    with mock_s3():
+        yield boto3.client("s3", region_name=AWS_REGION)
+
+
+@pytest.fixture(scope="function")
+def protect_monitor_file():
+    # read in the current contents, if any
+    curr = None
+    if MONITOR_FILE.exists():
+        curr = MONITOR_FILE.read_text()
+
+    # do something that may or may not write to the file
+    yield MONITOR_FILE
+    
+    # clean up by putting the original contents back, if any
+    if curr:
+        MONITOR_FILE.write_text(curr)
 
 
 # Below functions are fixtures that run steps 1 - 4
@@ -116,6 +139,8 @@ def ecs():
 # Therefor we return a non-mocked callback, the tests are decorated with
 # mocks, and then the tests invoke the callback returned by the fixture.
 
+
+# mock sqs and ecs before running cb
 @pytest.fixture(scope="function")
 def run_setup(aws_config):
     def f():
@@ -124,12 +149,38 @@ def run_setup(aws_config):
     return f
 
 
+# mock sqs and ecs before running cb
 @pytest.fixture(scope="function")
 def run_submitJob(run_setup, monkeypatch):
-    monkeypatch.setattr(sys, "argv", ["run.py", "submitJob", str(JOB_FILE)])
-
     def f():
+        # don't put this outside of the callback, else it may be overwritten
+        monkeypatch.setattr(sys, "argv", ["run.py", "submitJob", str(JOB_FILE)])
+
         run_setup()
         run.submitJob()
+        print('x')
+
+    return f
+
+
+# mock sqs, ecs, s3 and ec2 before running cb
+@pytest.fixture(scope="function")
+def run_startCluster(run_submitJob, monkeypatch, protect_monitor_file):
+    def f():
+        s3 = boto3.client('s3')
+
+        if (AWS_REGION == "us-east-1"):
+            # 'us-east-1' is the default region for S3 buckets
+            # and is not a vallid arg for "LocationConstraint"
+            s3.create_bucket(Bucket=AWS_BUCKET)
+        else:
+            s3.create_bucket(Bucket=AWS_BUCKET, CreateBucketConfiguration={"LocationConstraint": AWS_REGION})
+
+        run_submitJob()
+        
+        # don't put this outside of the callback, else it may be overwritten
+        monkeypatch.setattr(sys, "argv", ["run.py", "startCluster", str(FLEET_FILE)])
+        
+        run.startCluster()
 
     return f
