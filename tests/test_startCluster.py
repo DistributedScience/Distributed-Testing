@@ -1,8 +1,9 @@
 import json
+from types import MethodType
 
 import boto3
 import pytest
-from moto import mock_ecs, mock_sqs, mock_s3, mock_ec2
+from moto import mock_ecs, mock_sqs, mock_s3, mock_ec2, mock_logs
 
 import run
 import config
@@ -51,26 +52,61 @@ class TestGenerateECSConfig:
 class EarlyTermination(Exception):
     ...
 
-def hijack_client(real_client, service_name):
+def hijack_client(real_client, service_name, service_fn=None, service_count=1, service_fn_count=1):
     """
-    Patches boto3.client so that an invocation of a service
+    If service_fn is None,
+    Patches boto3.client('<some_service>') so that an invocation of a service
     (eg 'ec2' or 'logs') will raise an EarlyTermination exception, allowing
     inspection and testing of the stack frame up until that point.
+
+    If service_fn is not None,
+    Patches boto3.client('<some_service>').<service_fn> so that an invocation
+    of a service function (eg 'put_retention_policy') will raise an EarlyTermination
+    exception, allowing inspection and testing of the stack frame up until that point.
+
+    'service_count' represents the number of times the service can be called
+    before the EarlyTermination exception is raised.
+    
+    `service_fn_count` represents the number of times the service function can be called
+    before the EarlyTermination exception is raised.
     """
+    if service_fn is None:
+        real_client._called_n_times = service_count
+
     def f(*args, **kwargs):
-        if (args[0] == service_name):
-            raise EarlyTermination("early termination")
-        
-        return real_client(*args, **kwargs)
+        real_client_obj = real_client(*args, **kwargs)
+
+        if service_fn is None and args[0] == service_name:
+            real_client._called_n_times -= 1
+            if real_client._called_n_times == 0:
+                raise EarlyTermination("early termination")
+
+        elif service_fn is not None and args[0] == service_name:
+            real_client_obj._called_n_times = service_fn_count
+
+            real_fn = getattr(real_client_obj, service_fn)
+
+            def hijacked_fn(*args, **kwargs):
+                real_fn(*args, **kwargs)
+                real_client_obj._called_n_times -= 1
+                if real_client_obj._called_n_times == 0:
+                    raise EarlyTermination("early termination")
+            
+            setattr(real_client_obj, service_fn, hijacked_fn)
+
+        return real_client_obj
     
     return f
 
-class TestSpotFleetConfig:
 
+class TestSpotFleetConfig:
     @mock_ecs
     @mock_sqs
     @mock_s3
     def test_spot_fleet_config(self, run_startCluster, monkeypatch):
+        """
+        startCluster Step 1: set up the configuration files
+        """
         monkeypatch.setattr(boto3, "client", hijack_client(boto3.client, 'ec2'))
         with pytest.raises(EarlyTermination) as e_info:
             run_startCluster()
@@ -141,6 +177,9 @@ class TestSpotFleetConfig:
     @mock_s3
     @mock_ec2
     def test_make_spot_fleet_request(self, run_startCluster, monkeypatch):
+        """
+        startCluster Step 2: make the spot fleet request
+        """
         monkeypatch.setattr(boto3, "client", hijack_client(boto3.client, 'logs'))
         with pytest.raises(EarlyTermination) as e_info:
             run_startCluster()
@@ -168,6 +207,9 @@ class TestCreateMonitor:
     @mock_s3
     @mock_ec2
     def test_create_monitor(self, run_startCluster, monkeypatch):
+        """
+        startCluster Step 3: Make the monitor
+        """
         monkeypatch.setattr(boto3, "client", hijack_client(boto3.client, 'logs'))
         with pytest.raises(EarlyTermination) as e_info:
             run_startCluster()
@@ -187,6 +229,55 @@ class TestCreateMonitor:
         assert monitor_file_res["MONITOR_QUEUE_NAME"] == config.SQS_QUEUE_NAME
         assert monitor_file_res["MONITOR_BUCKET_NAME"] == config.AWS_BUCKET
         assert monitor_file_res["MONITOR_LOG_GROUP_NAME"] == config.LOG_GROUP_NAME
+
+
+class TestCreateLogGroup:
+    @mock_ecs
+    @mock_sqs
+    @mock_s3
+    @mock_ec2
+    @mock_logs
+    def test_create_log_group(self, run_startCluster, monkeypatch):
+        """
+        startCluster Step 4: Create the log group
+        """
+        monkeypatch.setattr(boto3, "client", hijack_client(
+            boto3.client,
+            'logs',
+            service_fn='put_retention_policy',
+            service_fn_count=2
+        ))
+
+        with pytest.raises(EarlyTermination) as e_info:
+            run_startCluster()
+
+        log_group_info_res = None
+        for tb in e_info.traceback:
+            if (tb.name == "startCluster"):
+                log_group_info_res = tb.frame.f_locals["loggroupinfo"]
+
+        assert log_group_info_res is not None
+        assert log_group_info_res["ResponseMetadata"]["HTTPStatusCode"] == 200
+
+        logs = boto3.client("logs")
+        log_group_info_res = logs.describe_log_groups(logGroupNamePrefix=config.LOG_GROUP_NAME)
+
+        assert "logGroups" in log_group_info_res
+        log_groups = log_group_info_res["logGroups"]
+        
+        name_log_groups = list(filter(
+            lambda lg: lg["logGroupName"] == config.LOG_GROUP_NAME, log_groups
+        ))
+
+        per_instance_log_groups = list(filter(
+            lambda lg: lg["logGroupName"] == config.LOG_GROUP_NAME + "_perInstance", log_groups
+        ))
+
+        assert len(name_log_groups) == 1
+        assert len(per_instance_log_groups) == 1
+
+        assert name_log_groups[0]["arn"] == f"arn:aws:logs:{config.AWS_REGION}:123456789012:log-group:{config.LOG_GROUP_NAME}"
+        assert per_instance_log_groups[0]["arn"] == f"arn:aws:logs:{config.AWS_REGION}:123456789012:log-group:{config.LOG_GROUP_NAME}_perInstance"
 
 
 class TestStartCluster:
