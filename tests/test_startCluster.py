@@ -46,31 +46,30 @@ class TestGenerateECSConfig:
 
 
 
-class EarlyTermination(Exception):
-    ...
-
-def hijack_ec2(real_client):
-    """
-    Patches boto3.client so that an invocation of 'ec2' will cause an
-    EarlyTermination exception, allowing inspection and testing of the
-    stack frame up until that point.
-    """
-    def f(*args, **kwargs):
-        if (args[0] == 'ec2'):
-            raise EarlyTermination("early termination")
-        
-        return real_client(*args, **kwargs)
-    
-    return f
-
-
 class TestSpotFleetConfig:
+    class EarlyTermination(Exception):
+        ...
+
+    def hijack_ec2(self, real_client):
+        """
+        Patches boto3.client so that an invocation of 'ec2' will cause an
+        EarlyTermination exception, allowing inspection and testing of the
+        stack frame up until that point.
+        """
+        def f(*args, **kwargs):
+            if (args[0] == 'ec2'):
+                raise self.EarlyTermination("early termination")
+            
+            return real_client(*args, **kwargs)
+        
+        return f
+
     @mock_ecs
     @mock_sqs
     @mock_s3
     def test_spot_fleet_config(self, run_startCluster, monkeypatch):
-        monkeypatch.setattr(boto3, "client", hijack_ec2(boto3.client))
-        with pytest.raises(EarlyTermination) as e_info:
+        monkeypatch.setattr(boto3, "client", self.hijack_ec2(boto3.client))
+        with pytest.raises(self.EarlyTermination) as e_info:
             run_startCluster()
 
         spot_fleet_config_res = None
