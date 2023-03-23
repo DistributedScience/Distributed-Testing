@@ -1,9 +1,12 @@
+import json
+
+import boto3
 import pytest
 from moto import mock_ecs, mock_sqs, mock_s3, mock_ec2
-import boto3
 
 import run
 import config
+from tests.conftest import MONITOR_FILE
 
 
 # startCluster will:
@@ -45,31 +48,31 @@ class TestGenerateECSConfig:
         assert res_file == f"ECS_CLUSTER={config.ECS_CLUSTER}\nECS_AVAILABLE_LOGGING_DRIVERS=[\"json-file\",\"awslogs\"]"
 
 
+class EarlyTermination(Exception):
+    ...
+
+def hijack_client(real_client, service_name):
+    """
+    Patches boto3.client so that an invocation of a service
+    (eg 'ec2' or 'logs') will raise an EarlyTermination exception, allowing
+    inspection and testing of the stack frame up until that point.
+    """
+    def f(*args, **kwargs):
+        if (args[0] == service_name):
+            raise EarlyTermination("early termination")
+        
+        return real_client(*args, **kwargs)
+    
+    return f
 
 class TestSpotFleetConfig:
-    class EarlyTermination(Exception):
-        ...
-
-    def hijack_client(self, real_client, service_name):
-        """
-        Patches boto3.client so that an invocation of a service
-        (eg 'ec2' or 'logs') will raise an EarlyTermination exception, allowing
-        inspection and testing of the stack frame up until that point.
-        """
-        def f(*args, **kwargs):
-            if (args[0] == service_name):
-                raise self.EarlyTermination("early termination")
-            
-            return real_client(*args, **kwargs)
-        
-        return f
 
     @mock_ecs
     @mock_sqs
     @mock_s3
     def test_spot_fleet_config(self, run_startCluster, monkeypatch):
-        monkeypatch.setattr(boto3, "client", self.hijack_client(boto3.client, 'ec2'))
-        with pytest.raises(self.EarlyTermination) as e_info:
+        monkeypatch.setattr(boto3, "client", hijack_client(boto3.client, 'ec2'))
+        with pytest.raises(EarlyTermination) as e_info:
             run_startCluster()
 
         spot_fleet_config_res = None
@@ -81,6 +84,8 @@ class TestSpotFleetConfig:
 
         # For config file requirements, see:
         # https://distributedscience.github.io/Distributed-Something/step_3_start_cluster.html#configuring-your-spot-fleet-request
+        # For full config file specs, see:
+        # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2/client/request_spot_fleet.html
         
         assert "IamFleetRole" in spot_fleet_config_res
         assert spot_fleet_config_res["IamFleetRole"].startswith("arn:aws:iam::")
@@ -136,14 +141,46 @@ class TestSpotFleetConfig:
     @mock_s3
     @mock_ec2
     def test_make_spot_fleet_request(self, run_startCluster, monkeypatch):
-        monkeypatch.setattr(boto3, "client", self.hijack_client(boto3.client, 'logs'))
-        with pytest.raises(self.EarlyTermination) as e_info:
+        monkeypatch.setattr(boto3, "client", hijack_client(boto3.client, 'logs'))
+        with pytest.raises(EarlyTermination) as e_info:
             run_startCluster()
 
         request_info_res = None
         for tb in e_info.traceback:
             if (tb.name == "startCluster"):
                 request_info_res = tb.frame.f_locals["requestInfo"]
+
+        assert "SpotFleetRequestId" in request_info_res
+        assert request_info_res["ResponseMetadata"]["HTTPStatusCode"] == 200
+
+        ec2 = boto3.client("ec2")
+        spot_fleet_request = ec2.describe_spot_fleet_requests(
+            MaxResults=1,
+            SpotFleetRequestIds=[request_info_res["SpotFleetRequestId"]]
+        )
+
+        assert len(spot_fleet_request["SpotFleetRequestConfigs"]) == 1
+
+
+class TestCreateMonitor:
+    @mock_ecs
+    @mock_sqs
+    @mock_s3
+    @mock_ec2
+    @pytest.mark.skip(reason="not implemented yet")
+    def test_create_monitor(self, run_startCluster, monkeypatch):
+        monkeypatch.setattr(boto3, "client", hijack_client(boto3.client, 'logs'))
+        with pytest.raises(EarlyTermination) as e_info:
+            run_startCluster()
+
+        request_info_res = None
+        for tb in e_info.traceback:
+            if (tb.name == "startCluster"):
+                request_info_res = tb.frame.f_locals["requestInfo"]
+
+        assert MONITOR_FILE.exists()
+
+        monitor_file_res = json.loads(MONITOR_FILE.read_text())
         
         print('.')
 
