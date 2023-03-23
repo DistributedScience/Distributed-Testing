@@ -167,7 +167,6 @@ class TestCreateMonitor:
     @mock_sqs
     @mock_s3
     @mock_ec2
-    @pytest.mark.skip(reason="not implemented yet")
     def test_create_monitor(self, run_startCluster, monkeypatch):
         monkeypatch.setattr(boto3, "client", hijack_client(boto3.client, 'logs'))
         with pytest.raises(EarlyTermination) as e_info:
@@ -182,7 +181,12 @@ class TestCreateMonitor:
 
         monitor_file_res = json.loads(MONITOR_FILE.read_text())
         
-        print('.')
+        assert monitor_file_res["MONITOR_FLEET_ID"] == request_info_res["SpotFleetRequestId"]
+        assert monitor_file_res["MONITOR_APP_NAME"] == config.APP_NAME
+        assert monitor_file_res["MONITOR_ECS_CLUSTER"] == config.ECS_CLUSTER
+        assert monitor_file_res["MONITOR_QUEUE_NAME"] == config.SQS_QUEUE_NAME
+        assert monitor_file_res["MONITOR_BUCKET_NAME"] == config.AWS_BUCKET
+        assert monitor_file_res["MONITOR_LOG_GROUP_NAME"] == config.LOG_GROUP_NAME
 
 
 class TestStartCluster:
