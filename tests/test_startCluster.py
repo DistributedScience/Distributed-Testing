@@ -50,14 +50,14 @@ class TestSpotFleetConfig:
     class EarlyTermination(Exception):
         ...
 
-    def hijack_ec2(self, real_client):
+    def hijack_client(self, real_client, service_name):
         """
-        Patches boto3.client so that an invocation of 'ec2' will cause an
-        EarlyTermination exception, allowing inspection and testing of the
-        stack frame up until that point.
+        Patches boto3.client so that an invocation of a service
+        (eg 'ec2' or 'logs') will raise an EarlyTermination exception, allowing
+        inspection and testing of the stack frame up until that point.
         """
         def f(*args, **kwargs):
-            if (args[0] == 'ec2'):
+            if (args[0] == service_name):
                 raise self.EarlyTermination("early termination")
             
             return real_client(*args, **kwargs)
@@ -68,7 +68,7 @@ class TestSpotFleetConfig:
     @mock_sqs
     @mock_s3
     def test_spot_fleet_config(self, run_startCluster, monkeypatch):
-        monkeypatch.setattr(boto3, "client", self.hijack_ec2(boto3.client))
+        monkeypatch.setattr(boto3, "client", self.hijack_client(boto3.client, 'ec2'))
         with pytest.raises(self.EarlyTermination) as e_info:
             run_startCluster()
 
@@ -130,6 +130,22 @@ class TestSpotFleetConfig:
             assert launch_specs[i]["InstanceType"] == config.MACHINE_TYPE[i]
 
             assert "UserData" in launch_specs[i]
+
+    @mock_ecs
+    @mock_sqs
+    @mock_s3
+    @mock_ec2
+    def test_make_spot_fleet_request(self, run_startCluster, monkeypatch):
+        monkeypatch.setattr(boto3, "client", self.hijack_client(boto3.client, 'logs'))
+        with pytest.raises(self.EarlyTermination) as e_info:
+            run_startCluster()
+
+        request_info_res = None
+        for tb in e_info.traceback:
+            if (tb.name == "startCluster"):
+                request_info_res = tb.frame.f_locals["requestInfo"]
+        
+        print('.')
 
 
 class TestStartCluster:

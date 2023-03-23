@@ -125,6 +125,9 @@ def protect_monitor_file():
     # clean up by putting the original contents back, if any
     if curr:
         MONITOR_FILE.write_text(curr)
+    # or delete the file if it didn't exist before
+    else:
+        MONITOR_FILE.unlink()
 
 
 # Below functions are fixtures that run steps 1 - 4
@@ -158,7 +161,6 @@ def run_submitJob(run_setup, monkeypatch):
 
         run_setup()
         run.submitJob()
-        print('x')
 
     return f
 
