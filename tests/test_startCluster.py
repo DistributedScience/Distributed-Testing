@@ -87,7 +87,7 @@ def hijack_client(real_client, service_name, service_fn=None, service_count=1, s
             real_fn = getattr(real_client_obj, service_fn)
 
             def hijacked_fn(*args, **kwargs):
-                real_fn(*args, **kwargs)
+                res = real_fn(*args, **kwargs)
                 real_client_obj._called_n_times -= 1
                 if real_client_obj._called_n_times == 0:
                     raise EarlyTermination("early termination")
@@ -251,13 +251,10 @@ class TestCreateLogGroup:
         with pytest.raises(EarlyTermination) as e_info:
             run_startCluster()
 
-        log_group_info_res = None
-        for tb in e_info.traceback:
-            if (tb.name == "startCluster"):
-                log_group_info_res = tb.frame.f_locals["loggroupinfo"]
+        put_retention_policy_res = e_info.traceback[-1].frame.f_locals["res"]
 
-        assert log_group_info_res is not None
-        assert log_group_info_res["ResponseMetadata"]["HTTPStatusCode"] == 200
+        assert put_retention_policy_res is not None
+        assert put_retention_policy_res["ResponseMetadata"]["HTTPStatusCode"] == 200
 
         logs = boto3.client("logs")
         log_group_info_res = logs.describe_log_groups(logGroupNamePrefix=config.LOG_GROUP_NAME)
@@ -279,6 +276,41 @@ class TestCreateLogGroup:
         assert name_log_groups[0]["arn"] == f"arn:aws:logs:{config.AWS_REGION}:123456789012:log-group:{config.LOG_GROUP_NAME}"
         assert per_instance_log_groups[0]["arn"] == f"arn:aws:logs:{config.AWS_REGION}:123456789012:log-group:{config.LOG_GROUP_NAME}_perInstance"
 
+
+class TestUpdateService:
+    @mock_ecs
+    @mock_sqs
+    @mock_s3
+    @mock_ec2
+    @mock_logs
+    def test_update_service(self, run_startCluster, monkeypatch):
+        """
+        startCluster Step 5: update the ECS service to be ready
+        to inject docker containers in EC2 instances
+        """
+        monkeypatch.setattr(boto3, "client", hijack_client(
+            boto3.client,
+            'ecs',
+            service_fn='update_service',
+        ))
+
+        with pytest.raises(EarlyTermination) as e_info:
+            run_startCluster()
+
+        update_service_res = e_info.traceback[-1].frame.f_locals["res"]
+
+        assert update_service_res is not None
+        assert update_service_res["ResponseMetadata"]["HTTPStatusCode"] == 200
+
+        ecs = boto3.client("ecs")
+
+        res_service = ecs.describe_services(cluster=config.ECS_CLUSTER, services=[f"{config.APP_NAME}Service"])
+
+        assert len(res_service["services"]) >= 1
+
+        res_service = res_service["services"][0]
+
+        assert int(res_service["desiredCount"]) == config.CLUSTER_MACHINES * config.TASKS_PER_MACHINE
 
 class TestStartCluster:
     @mock_ecs
