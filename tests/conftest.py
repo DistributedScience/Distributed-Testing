@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 import boto3
-from moto import mock_sqs, mock_ecs, mock_s3
+from moto import mock_sqs, mock_ecs, mock_s3, mock_ec2
 
 import run
 from config import AWS_REGION, AWS_PROFILE, AWS_BUCKET, APP_NAME
@@ -111,6 +111,11 @@ def s3():
     with mock_s3():
         yield boto3.client("s3", region_name=AWS_REGION)
 
+@pytest.fixture(scope="function")
+def ec2():
+    with mock_ec2():
+        yield boto3.client("ec2", region_name=AWS_REGION)
+
 
 @pytest.fixture(scope="function")
 def protect_monitor_file():
@@ -165,7 +170,7 @@ def run_submitJob(run_setup, monkeypatch):
     return f
 
 
-# mock sqs, ecs, s3 and ec2 before running cb
+# mock sqs, ecs, s3, ec2 and logs before running cb
 @pytest.fixture(scope="function")
 def run_startCluster(run_submitJob, monkeypatch, protect_monitor_file):
     def f():

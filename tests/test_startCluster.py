@@ -343,7 +343,25 @@ class TestStartCluster:
     @mock_ecs
     @mock_sqs
     @mock_s3
-    @mock_ec2
-    @pytest.mark.skip(reason="not implemented yet")
-    def test_start_cluster(self, run_startCluster):
+    @mock_logs
+    def test_start_cluster(self, ec2, run_startCluster):
         run_startCluster()
+
+        spot_fleet_request = ec2.describe_spot_fleet_requests()
+        
+        assert "ResponseMetadata" in spot_fleet_request
+        assert spot_fleet_request["ResponseMetadata"]["HTTPStatusCode"] == 200
+        assert "SpotFleetRequestConfigs" in spot_fleet_request
+        assert len(spot_fleet_request["SpotFleetRequestConfigs"]) == 1
+
+        spot_fleet_request_config = spot_fleet_request["SpotFleetRequestConfigs"][0]
+        spot_fleet_request_id = spot_fleet_request_config["SpotFleetRequestId"]
+
+        status = ec2.describe_spot_fleet_instances(SpotFleetRequestId=spot_fleet_request_id)
+
+        assert "ResponseMetadata" in status
+        assert status["ResponseMetadata"]["HTTPStatusCode"] == 200
+        assert "ActiveInstances" in status
+        assert len(status["ActiveInstances"]) == config.CLUSTER_MACHINES
+
+        assert MONITOR_FILE.exists()
