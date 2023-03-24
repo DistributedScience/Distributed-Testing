@@ -114,7 +114,7 @@ class TestSpotFleetConfig:
         spot_fleet_config_res = None
         for tb in e_info.traceback:
             if (tb.name == "startCluster"):
-                spot_fleet_config_res = tb.frame.f_locals["spotfleetConfig"]
+                spot_fleet_config_res = tb.locals["spotfleetConfig"]
         
         assert spot_fleet_config_res is not None
 
@@ -217,7 +217,7 @@ class TestCreateMonitor:
         request_info_res = None
         for tb in e_info.traceback:
             if (tb.name == "startCluster"):
-                request_info_res = tb.frame.f_locals["requestInfo"]
+                request_info_res = tb.locals["requestInfo"]
 
         assert MONITOR_FILE.exists()
 
@@ -251,7 +251,7 @@ class TestCreateLogGroup:
         with pytest.raises(EarlyTermination) as e_info:
             run_startCluster()
 
-        put_retention_policy_res = e_info.traceback[-1].frame.f_locals["res"]
+        put_retention_policy_res = e_info.traceback[-1].locals["res"]
 
         assert put_retention_policy_res is not None
         assert put_retention_policy_res["ResponseMetadata"]["HTTPStatusCode"] == 200
@@ -297,7 +297,7 @@ class TestUpdateService:
         with pytest.raises(EarlyTermination) as e_info:
             run_startCluster()
 
-        update_service_res = e_info.traceback[-1].frame.f_locals["res"]
+        update_service_res = e_info.traceback[-1].locals["res"]
 
         assert update_service_res is not None
         assert update_service_res["ResponseMetadata"]["HTTPStatusCode"] == 200
@@ -311,6 +311,33 @@ class TestUpdateService:
         res_service = res_service["services"][0]
 
         assert int(res_service["desiredCount"]) == config.CLUSTER_MACHINES * config.TASKS_PER_MACHINE
+
+
+class TestMonitorInstanceCreation:
+    @mock_ecs
+    @mock_sqs
+    @mock_s3
+    @mock_ec2
+    @mock_logs
+    def test_monitor_instance_creation(self, run_startCluster, monkeypatch):
+        """
+        startCluster Step 6: Monitor the creation of the instances until all are present
+        """
+        monkeypatch.setattr(boto3, "client", hijack_client(
+            boto3.client,
+            'ec2',
+            service_fn='describe_spot_fleet_instances',
+        ))
+
+        with pytest.raises(EarlyTermination) as e_info:
+            run_startCluster()
+
+        describe_spot_fleet_instances_res = e_info.traceback[-1].locals["res"]
+
+        assert describe_spot_fleet_instances_res is not None
+        assert describe_spot_fleet_instances_res["ResponseMetadata"]["HTTPStatusCode"] == 200
+        assert len(describe_spot_fleet_instances_res["ActiveInstances"]) == config.CLUSTER_MACHINES
+
 
 class TestStartCluster:
     @mock_ecs
