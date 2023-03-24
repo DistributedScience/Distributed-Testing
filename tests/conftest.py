@@ -191,3 +191,21 @@ def run_startCluster(run_submitJob, monkeypatch, protect_monitor_file):
         run.startCluster()
 
     return f
+
+
+# mock sqs, ecs, s3, ec2, logs and cloudwatch before running cb
+@pytest.fixture(scope="function")
+def monitor(run_startCluster, monkeypatch):
+    def f(cheapest=None):
+        run_startCluster()
+        
+        args = ["run.py", "monitor", str(MONITOR_FILE)]
+        if cheapest is not None:
+            args.append(str(cheapest))
+        
+        # don't put this outside of the callback, else it may be overwritten
+        monkeypatch.setattr(sys, "argv", args)
+
+        run.monitor()
+
+    return f

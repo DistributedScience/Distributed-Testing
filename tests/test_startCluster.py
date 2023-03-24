@@ -1,5 +1,4 @@
 import json
-from types import MethodType
 
 import boto3
 import pytest
